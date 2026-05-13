@@ -1,0 +1,7 @@
+data/raw/
+models/
+mlruns/
+.venv/
+__pycache__/
+*.pyc
+*.db

@@ -1,0 +1,23 @@
+[project]
+name = "cineiq"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cython<3.0",
+    "dagshub>=0.7.0",
+    "datasets>=4.8.5",
+    "fastapi>=0.136.1",
+    "mlflow",
+    "numpy<2.0",
+    "pandas>=2.3.3",
+    "pyyaml>=6.0.3",
+    "scikit-learn",
+    "sentence-transformers>=5.4.1",
+    "setuptools<70",
+    "sqlalchemy>=2.0.49",
+    "uvicorn>=0.46.0",
+    "vadersentiment>=3.3.2",
+    "wheel>=0.47.0",
+]

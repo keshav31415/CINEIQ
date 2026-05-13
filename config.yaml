@@ -1,0 +1,34 @@
+data:
+  movielens_dir: data/raw/ml-100k      # swap to ml-25m for final run
+  tmdb_movies: data/raw/tmdb_5000_movies.csv
+  tmdb_credits: data/raw/tmdb_5000_credits.csv
+  database: data/processed/cineiq.db
+
+models:
+  output_dir: models/
+
+svd:
+  n_factors: 100
+  n_epochs: 20
+  lr: 0.005
+  reg: 0.02
+
+embeddings:
+  model_name: all-MiniLM-L6-v2
+  batch_size: 256
+
+ensemble:
+  candidate_pool: 50      # top-N from SVD+Content before re-rank
+  final_top_k: 10
+  alpha: 0.5              # SVD weight
+  beta: 0.3               # Content weight
+  gamma: 0.2              # Sentiment re-rank weight
+
+mlflow:
+  tracking_uri: https://dagshub.com/keshav31415/CIENIQ.mlflow
+  dagshub_repo_owner: keshav31415
+  dagshub_repo_name: CIENIQ
+
+api:
+  host: 0.0.0.0
+  port: 8000
