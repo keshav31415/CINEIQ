@@ -2,6 +2,7 @@ data:
   movielens_dir: data/raw/ml-100k      # swap to ml-25m for final run
   tmdb_movies: data/raw/tmdb_5000_movies.csv
   tmdb_credits: data/raw/tmdb_5000_credits.csv
+  aclimdb_dir: data/raw/aclImdb
   database: data/processed/cineiq.db
 
 models:
@@ -32,3 +33,6 @@ mlflow:
 api:
   host: 0.0.0.0
   port: 8000
+
+tmdb:
+  api_key: ${TMDB_API_KEY}

@@ -51,9 +51,17 @@ class HybridEnsemble:
             self.content_id_to_idx = {int(k): v for k, v in json.load(f).items()}
         self.content_idx_to_id = {v: k for k, v in self.content_id_to_idx.items()}
 
-        # --- Load Sentiment cache ---
+        # --- Load Sentiment cache (VADER/TMDB scalar fallback) ---
         with open(models / 'imdb_sentiment_cache.json', 'r') as f:
             self.sentiment_cache = json.load(f)
+
+        # --- Load ABSA cache (optional — falls back to scalar if missing) ---
+        absa_path = models / 'absa_sentiment_cache.json'
+        if absa_path.exists():
+            with open(absa_path, 'r') as f:
+                self.absa_cache = json.load(f)
+        else:
+            self.absa_cache = {}
 
         # Precompute: set of all known movie IDs (intersection of both systems)
         self.all_movie_ids = sorted(
@@ -63,7 +71,8 @@ class HybridEnsemble:
         print(f"  Ensemble loaded: {len(self.all_movie_ids)} movies in common")
         print(f"  SVD: {self.user_factors.shape[0]} users, {self.item_factors.shape[0]} items")
         print(f"  Content: {self.embeddings.shape}")
-        print(f"  Sentiment: {len(self.sentiment_cache)} movies scored")
+        print(f"  Sentiment (scalar): {len(self.sentiment_cache)} movies scored")
+        print(f"  Sentiment (ABSA):   {len(self.absa_cache)} movies scored")
 
     def _normalize(self, scores):
         """Min-max normalize to [0, 1]."""
@@ -103,6 +112,55 @@ class HybridEnsemble:
         profile = self.embeddings[liked_indices].mean(axis=0).reshape(1, -1)
         scores = cosine_similarity(profile, self.embeddings)[0]
         return scores
+
+    _ASPECTS = ['acting', 'plot', 'visuals', 'pacing', 'music']
+
+    def _build_aspect_profile(self, rated_movie_ids: list) -> dict:
+        """
+        Average ABSA aspect scores across the user's rated movies.
+        Returns {aspect: float} — None for aspects with no data.
+        """
+        sums = {asp: [] for asp in self._ASPECTS}
+        for movie_id in rated_movie_ids:
+            absa = self.absa_cache.get(str(movie_id))
+            if not absa:
+                continue
+            for asp in self._ASPECTS:
+                val = absa.get(asp)
+                if val is not None:
+                    sums[asp].append(val)
+        return {asp: (sum(v) / len(v)) if v else None for asp, v in sums.items()}
+
+    def _personalized_sentiment(self, movie_id: int, user_profile: dict) -> tuple[float, str | None]:
+        """
+        Compute a personalized sentiment score using ABSA aspect dot-product.
+        Falls back to scalar VADER/TMDB score if ABSA unavailable.
+
+        Returns (score, top_aspect_note) where top_aspect_note is a string
+        describing the most influential aspect, or None if using fallback.
+        """
+        absa = self.absa_cache.get(str(movie_id))
+        if not absa:
+            return self.sentiment_cache.get(str(movie_id), 0.0), None
+
+        scores, aspects_used = [], []
+        for asp in self._ASPECTS:
+            user_pref = user_profile.get(asp)
+            movie_asp = absa.get(asp)
+            if user_pref is not None and movie_asp is not None:
+                scores.append(user_pref * movie_asp)
+                aspects_used.append((asp, user_pref * movie_asp))
+
+        if not scores:
+            fallback = absa.get('overall')
+            return (fallback if fallback is not None
+                    else self.sentiment_cache.get(str(movie_id), 0.0)), None
+
+        personalized = sum(scores) / len(scores)
+        top_asp, top_val = max(aspects_used, key=lambda x: abs(x[1]))
+        note = f"Strong on {top_asp}" if top_val > 0.1 else (
+               f"Weak on {top_asp}" if top_val < -0.1 else None)
+        return personalized, note
 
     def recommend(self, user_id, rated_movie_ids):
         """
@@ -157,7 +215,9 @@ class HybridEnsemble:
         # Pick top N candidates from Stage 1
         top_n_indices = np.argsort(stage1_scores)[::-1][:self.candidate_pool]
 
-        # ===== STAGE 2: Sentiment Re-Ranking =====
+        # ===== STAGE 2: Personalised Sentiment Re-Ranking =====
+        user_profile = self._build_aspect_profile(rated_movie_ids)
+
         results = []
         for content_idx in top_n_indices:
             if stage1_scores[content_idx] == -np.inf:
@@ -169,19 +229,15 @@ class HybridEnsemble:
 
             s1_score = stage1_scores[content_idx]
 
-            # Lookup precomputed VADER sentiment
-            sent_score = self.sentiment_cache.get(str(movie_id), 0.0)
-
-            # Final re-ranked score
+            sent_score, aspect_note = self._personalized_sentiment(movie_id, user_profile)
             final_score = s1_score + self.gamma * sent_score
 
-            # Individual component scores for explainability
             svd_raw = 0.0
             if has_svd and movie_id in self.svd_item_map:
                 svd_raw = raw_svd[self.svd_item_map[movie_id]]
             content_raw = raw_content[content_idx]
 
-            explanation = self._explain(svd_raw, content_raw, sent_score, has_svd)
+            explanation = self._explain(svd_raw, content_raw, sent_score, has_svd, aspect_note)
 
             results.append({
                 'movie_id': movie_id,
@@ -196,7 +252,7 @@ class HybridEnsemble:
         results.sort(key=lambda x: x['score'], reverse=True)
         return results[:self.top_k]
 
-    def _explain(self, svd_score, content_score, sentiment_score, has_svd):
+    def _explain(self, svd_score, content_score, sentiment_score, has_svd, aspect_note=None):
         """Generate human-readable explanation strings."""
         reasons = []
 
@@ -206,10 +262,12 @@ class HybridEnsemble:
             reasons.append("Matches your genre and plot preferences")
         elif content_score > 0.3:
             reasons.append("Partially overlaps with your taste profile")
-        if sentiment_score > 0.3:
+        if aspect_note:
+            reasons.append(aspect_note)
+        elif sentiment_score > 0.3:
             reasons.append("Strong positive audience sentiment")
         elif sentiment_score < -0.3:
-            reasons.append("⚠ Mixed or negative audience reviews")
+            reasons.append("Mixed or negative audience reviews")
 
         if not reasons:
             reasons.append("Recommended based on overall compatibility")
@@ -228,6 +286,7 @@ class HybridEnsemble:
         k = top_k or self.top_k
         raw_content = self._content_scores_for_user(seed_movie_ids)
         seed_set = set(seed_movie_ids)
+        user_profile = self._build_aspect_profile(seed_movie_ids)
 
         results = []
         for movie_id in self.all_movie_ids:
@@ -236,10 +295,10 @@ class HybridEnsemble:
 
             content_idx = self.content_id_to_idx[movie_id]
             content_score = raw_content[content_idx]
-            sent_score = self.sentiment_cache.get(str(movie_id), 0.0)
+            sent_score, aspect_note = self._personalized_sentiment(movie_id, user_profile)
             final_score = content_score + self.gamma * sent_score
 
-            explanation = self._explain(0.0, content_score, sent_score, has_svd=False)
+            explanation = self._explain(0.0, content_score, sent_score, has_svd=False, aspect_note=aspect_note)
 
             results.append({
                 'movie_id': movie_id,

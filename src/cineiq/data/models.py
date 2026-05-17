@@ -29,3 +29,4 @@ class Review(Base):
     review_text = Column(Text, nullable=False)
     label = Column(String(10))       # 'positive' / 'negative'
     vader_compound = Column(Float, nullable=True)  # filled in Phase 3
+    source = Column(String(20), default='aclimdb')  # 'aclimdb' or 'tmdb'
