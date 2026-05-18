@@ -1,8 +1,17 @@
 data/raw/
+data/exports/
 models/
 mlruns/
+mlflow.db
 .venv/
 __pycache__/
 *.pyc
 *.db
 .env
+checkpoints/
+share/
+share.zip
+notebooks/__pycache__/
+*.egg-info/
+dist/
+build/

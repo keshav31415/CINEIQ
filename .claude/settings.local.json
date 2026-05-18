@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:the-examples-book.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:data.mendeley.com)",
+      "WebFetch(domain:rstudio-pubs-static.s3.amazonaws.com)",
+      "WebFetch(domain:openbigdata.org)",
+      "Bash(pip show *)",
+      "Bash(.venv/Scripts/pip install *)",
+      "Bash(pip install *)",
+      "PowerShell(& \"d:\\\\Keshav\\\\my_projects\\\\cineiq\\\\.venv\\\\Scripts\\\\pip.exe\" install python-dotenv)",
+      "PowerShell(powercfg /change standby-timeout-ac 0)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(powercfg /change monitor-timeout-ac 0)",
+      "Bash(git add *)"
+    ]
+  }
+}

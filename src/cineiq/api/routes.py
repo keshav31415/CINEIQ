@@ -1,17 +1,22 @@
+import sqlite3
+
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Request, Query
-from sqlalchemy import select
+from fastapi.responses import FileResponse
+from pathlib import Path
+from sqlalchemy import select, text
 
 from cineiq.data.models import Rating, Movie
 from cineiq.api.schemas import (
     HealthResponse, RecommendationResponse, RecommendationItem,
-    ColdStartRequest, MovieResponse,
+    ColdStartRequest, MovieResponse, CatalogItem,
 )
 
 router = APIRouter()
 
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
-MODEL_VERSION = "v1.0-svd100-ml100k"
+MODEL_VERSION   = "v1.0-svd200-ml25m"
+UI_DIR          = Path(__file__).parent.parent.parent.parent / "dashboard"
 
 
 def _build_poster_url(poster_path: str | None) -> str | None:
@@ -173,3 +178,123 @@ def get_movie(request: Request, movie_id: int):
         poster_url=_build_poster_url(row['poster_path']),
         sentiment_score=sentiment,
     )
+
+
+# ─── Catalog helpers ─────────────────────────────────────────────────
+
+def _catalog_query(session, sql: str, params: dict, ensemble) -> list[CatalogItem]:
+    rows = pd.read_sql(text(sql), session.bind, params=params)
+    items = []
+    for _, r in rows.iterrows():
+        genres = r['genres'].split('|') if r.get('genres') else []
+        items.append(CatalogItem(
+            movie_id=int(r['movie_id']),
+            title=r['title'],
+            genres=genres,
+            overview=r['overview'] if str(r.get('overview', '')) not in ('nan', 'None', '') else None,
+            release_year=int(r['release_year']) if pd.notnull(r.get('release_year')) else None,
+            vote_average=float(r['vote_average']) if pd.notnull(r.get('vote_average')) else None,
+            poster_url=_build_poster_url(r.get('poster_path')),
+            sentiment_score=ensemble.sentiment_cache.get(str(int(r['movie_id']))),
+        ))
+    return items
+
+
+# ─── Search ──────────────────────────────────────────────────────────
+
+@router.get("/search", response_model=list[CatalogItem])
+def search(
+    request: Request,
+    q: str = Query(..., min_length=1),
+    n: int = Query(default=24, ge=1, le=50),
+):
+    session  = request.app.state.db_session
+    ensemble = request.app.state.ensemble
+    return _catalog_query(session, """
+        SELECT movie_id, title, genres, overview, release_year, vote_average, poster_path
+        FROM movies WHERE title LIKE :q ORDER BY vote_average DESC LIMIT :n
+    """, {"q": f"%{q}%", "n": n}, ensemble)
+
+
+# ─── User rated movies ────────────────────────────────────────────────
+
+@router.get("/user/{user_id}/rated")
+def user_rated(request: Request, user_id: int):
+    session = request.app.state.db_session
+    rated = pd.read_sql(
+        select(Rating.movie_id, Rating.rating).where(Rating.user_id == user_id),
+        session.bind
+    )
+    if rated.empty:
+        return {"user_id": user_id, "rated": []}
+    top = rated.nlargest(1, 'rating').iloc[0]
+    return {
+        "user_id": user_id,
+        "rated_ids": rated['movie_id'].tolist(),
+        "top_movie_id": int(top['movie_id']),
+    }
+
+
+# ─── Catalog rows ────────────────────────────────────────────────────
+
+@router.get("/catalog/genre", response_model=list[CatalogItem])
+def catalog_genre(
+    request: Request,
+    genre: str = Query(...),
+    n: int = Query(default=20, ge=1, le=40),
+):
+    session  = request.app.state.db_session
+    ensemble = request.app.state.ensemble
+    return _catalog_query(session, """
+        SELECT movie_id, title, genres, overview, release_year, vote_average, poster_path
+        FROM movies WHERE genres LIKE :g AND vote_count > 50
+        ORDER BY vote_average DESC LIMIT :n
+    """, {"g": f"%{genre}%", "n": n}, ensemble)
+
+
+@router.get("/catalog/top-rated", response_model=list[CatalogItem])
+def catalog_top_rated(
+    request: Request,
+    n: int = Query(default=20, ge=1, le=40),
+):
+    session  = request.app.state.db_session
+    ensemble = request.app.state.ensemble
+    return _catalog_query(session, """
+        SELECT movie_id, title, genres, overview, release_year, vote_average, poster_path
+        FROM movies WHERE vote_count > 200 ORDER BY vote_average DESC LIMIT :n
+    """, {"n": n}, ensemble)
+
+
+@router.get("/catalog/hidden-gems", response_model=list[CatalogItem])
+def catalog_hidden_gems(
+    request: Request,
+    n: int = Query(default=20, ge=1, le=40),
+):
+    session  = request.app.state.db_session
+    ensemble = request.app.state.ensemble
+    return _catalog_query(session, """
+        SELECT movie_id, title, genres, overview, release_year, vote_average, poster_path
+        FROM movies WHERE vote_count BETWEEN 10 AND 80 AND vote_average >= 7.5
+        ORDER BY vote_average DESC LIMIT :n
+    """, {"n": n}, ensemble)
+
+
+@router.get("/catalog/classics", response_model=list[CatalogItem])
+def catalog_classics(
+    request: Request,
+    n: int = Query(default=20, ge=1, le=40),
+):
+    session  = request.app.state.db_session
+    ensemble = request.app.state.ensemble
+    return _catalog_query(session, """
+        SELECT movie_id, title, genres, overview, release_year, vote_average, poster_path
+        FROM movies WHERE release_year < 1990 AND vote_count > 25
+        ORDER BY vote_average DESC LIMIT :n
+    """, {"n": n}, ensemble)
+
+
+# ─── Serve HTML UI ───────────────────────────────────────────────────
+
+@router.get("/")
+def serve_ui():
+    return FileResponse(UI_DIR / "index.html")

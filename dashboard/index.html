@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CINEIQ</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red: #e50914;
+    --bg: #141414;
+    --card-bg: #1f2937;
+    --text: #e5e5e5;
+    --muted: #9ca3af;
+    --card-w: 160px;
+    --card-h: 240px;
+  }
+
+  body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue', Arial, sans-serif; overflow-x: hidden; }
+
+  /* ── Scrollbars ── */
+  ::-webkit-scrollbar { height: 4px; width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--red); border-radius: 3px; }
+
+  /* ── Navbar ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    display: flex; align-items: center; gap: 28px; padding: 14px 48px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, transparent 100%);
+  }
+  .logo { font-family: monospace; font-size: 1.8em; font-weight: 900; color: var(--red); letter-spacing: 5px; text-decoration: none; }
+  .nav-link { color: #ccc; font-size: .82em; text-decoration: none; cursor: pointer; transition: color .15s; }
+  .nav-link:hover, .nav-link.active { color: #fff; font-weight: 600; }
+  .nav-spacer { flex: 1; }
+  .search-wrap { position: relative; }
+  #search-input {
+    background: rgba(20,20,20,.85); border: 1px solid rgba(255,255,255,.3);
+    color: #fff; padding: 7px 36px 7px 14px; border-radius: 4px; font-size: .85em;
+    width: 260px; outline: none; transition: border-color .2s;
+  }
+  #search-input:focus { border-color: #fff; }
+  #search-input::placeholder { color: var(--muted); }
+  .search-icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+  #search-clear { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); cursor: pointer; display: none; font-size: 1.1em; }
+  #user-select {
+    background: rgba(20,20,20,.85); border: 1px solid rgba(255,255,255,.25);
+    color: #fff; padding: 7px 10px; border-radius: 4px; font-size: .82em; outline: none;
+  }
+
+  /* ── Suggestions dropdown ── */
+  #suggestions {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+    background: #1a1a1a; border: 1px solid rgba(255,255,255,.15);
+    border-radius: 6px; overflow: hidden; z-index: 2000; display: none;
+  }
+  .suggestion-item {
+    padding: 9px 14px; cursor: pointer; font-size: .83em;
+    display: flex; align-items: center; gap: 10px; transition: background .1s;
+  }
+  .suggestion-item:hover { background: rgba(255,255,255,.08); }
+  .suggestion-thumb {
+    width: 36px; height: 54px; border-radius: 3px; object-fit: cover; flex-shrink: 0;
+    background: #374151;
+  }
+  .suggestion-meta { flex: 1; min-width: 0; }
+  .suggestion-title { font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .suggestion-genre { font-size: .75em; color: var(--muted); margin-top: 2px; }
+
+  /* ── Hero ── */
+  #hero {
+    min-height: 78vh; display: flex; align-items: flex-end;
+    padding: 0 48px 60px; position: relative; overflow: hidden;
+  }
+  #hero-bg { position: absolute; inset: 0; background-size: cover; background-position: center 20%; transition: background-image .4s; }
+  #hero-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to right, rgba(0,0,0,.88) 35%, rgba(0,0,0,.05) 100%),
+                linear-gradient(to top, rgba(20,20,20,1) 0%, transparent 35%);
+  }
+  #hero-content { position: relative; max-width: 560px; }
+  #hero-badge { display: inline-block; background: var(--red); color: #fff; font-size: .7em; font-weight: 800; padding: 4px 12px; border-radius: 3px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+  #hero-title { font-size: 2.8em; font-weight: 900; color: #fff; line-height: 1.1; text-shadow: 1px 2px 8px rgba(0,0,0,.6); margin-bottom: 10px; }
+  #hero-meta { font-size: .82em; color: #bbb; margin-bottom: 12px; }
+  .hero-tag { display: inline-block; border: 1px solid rgba(255,255,255,.35); color: #ccc; font-size: .72em; padding: 2px 9px; border-radius: 3px; margin-right: 5px; }
+  #hero-desc { font-size: .9em; color: #ddd; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  #hero-score { font-size: .78em; color: var(--red); font-weight: 800; margin-top: 10px; }
+
+  /* ── Rows ── */
+  main { padding-top: 0; }
+  .row-section { padding: 0 48px 24px; }
+  .row-title { font-size: 1.05em; font-weight: 700; color: var(--text); margin-bottom: 10px; letter-spacing: .2px; }
+  .row-strip {
+    display: flex; gap: 7px; overflow-x: auto; padding-bottom: 6px;
+    scrollbar-width: thin; scrollbar-color: var(--red) var(--bg);
+  }
+  .divider { height: 1px; background: rgba(255,255,255,.07); margin: 4px 48px 20px; }
+
+  /* ── Cards ── */
+  .card {
+    flex: 0 0 auto; width: var(--card-w); height: var(--card-h);
+    border-radius: 6px; overflow: hidden; position: relative; cursor: pointer;
+    transition: transform .22s ease, box-shadow .22s ease;
+    border: 1px solid rgba(255,255,255,.04);
+  }
+  .card:hover { transform: scale(1.13); box-shadow: 0 8px 28px rgba(0,0,0,.75); z-index: 10; }
+  .card-bg { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .card-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.92) 0%, rgba(0,0,0,.04) 55%); }
+  .card-body { position: absolute; bottom: 0; left: 0; right: 0; padding: 9px 8px; }
+  .card-title { font-size: .71em; font-weight: 700; color: #fff; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 3px; }
+  .card-genre { font-size: .61em; color: rgba(255,255,255,.55); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-bottom: 3px; }
+  .card-score { font-size: .64em; color: var(--red); font-weight: 800; }
+  .card-sent-pos { font-size: .59em; color: #34d399; margin-left: 5px; }
+  .card-sent-neg { font-size: .59em; color: #f87171; margin-left: 5px; }
+
+  /* ── Search results page ── */
+  #search-page { display: none; padding: 80px 48px 40px; }
+  #search-page h2 { font-size: 1.1em; color: var(--text); margin-bottom: 18px; }
+  #search-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; }
+  .search-card { border-radius: 6px; overflow: hidden; cursor: pointer; border: 1px solid rgba(255,255,255,.06); transition: transform .2s; }
+  .search-card:hover { transform: scale(1.05); }
+  .search-card-img { width: 100%; height: 200px; object-fit: cover; display: block; }
+  .search-card-info { background: #1f2937; padding: 8px 10px; }
+  .search-card-title { font-size: .76em; font-weight: 700; color: #f3f4f6; margin-bottom: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .search-card-genre { font-size: .64em; color: var(--muted); }
+  .search-card-score { font-size: .68em; color: var(--red); font-weight: 700; margin-top: 3px; }
+
+  /* ── Loading skeleton ── */
+  .skeleton { background: linear-gradient(90deg, #1f2937 25%, #374151 50%, #1f2937 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* ── Spinner ── */
+  #spinner { display: none; position: fixed; inset: 0; background: rgba(20,20,20,.7); z-index: 9999; align-items: center; justify-content: center; }
+  .spin { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,.2); border-top-color: var(--red); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Spinner -->
+<div id="spinner"><div class="spin"></div></div>
+
+<!-- Navbar -->
+<nav>
+  <span class="logo">CINEIQ</span>
+  <a class="nav-link active" onclick="showHome()">Home</a>
+  <a class="nav-link" href="http://localhost:8501">Taste Dashboard</a>
+  <div class="nav-spacer"></div>
+  <label style="font-size:.78em;color:var(--muted);margin-right:4px">User</label>
+  <select id="user-select" onchange="onUserChange()">
+    <!-- populated by JS -->
+  </select>
+  <div class="search-wrap">
+    <input id="search-input" type="text" placeholder="🔍  Search movies…" autocomplete="off"
+           oninput="onSearchInput()" onkeydown="onSearchKey(event)">
+    <span class="search-icon" id="search-icon">⌕</span>
+    <span id="search-clear" onclick="clearSearch()">✕</span>
+    <div id="suggestions"></div>
+  </div>
+</nav>
+
+<!-- Browse page -->
+<div id="browse-page">
+  <div id="hero">
+    <div id="hero-bg"></div>
+    <div id="hero-overlay"></div>
+    <div id="hero-content">
+      <div id="hero-badge">★ Top Pick</div>
+      <div id="hero-title">Loading…</div>
+      <div id="hero-meta"></div>
+      <div id="hero-desc"></div>
+      <div id="hero-score"></div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <main id="rows-container"></main>
+</div>
+
+<!-- Search results page -->
+<div id="search-page">
+  <h2 id="search-heading"></h2>
+  <div id="search-grid"></div>
+</div>
+
+<script>
+const API = '';
+const TMDB_W300 = 'https://image.tmdb.org/t/p/w300';
+const TMDB_W1280 = 'https://image.tmdb.org/t/p/w1280';
+
+// ── Genre gradient fallbacks ──────────────────────────────────────────
+const GRAD = {
+  Action:      'linear-gradient(160deg,#7f1d1d,#dc2626)',
+  Adventure:   'linear-gradient(160deg,#78350f,#d97706)',
+  Animation:   'linear-gradient(160deg,#064e3b,#10b981)',
+  Comedy:      'linear-gradient(160deg,#713f12,#f59e0b)',
+  Crime:       'linear-gradient(160deg,#111827,#4b5563)',
+  Documentary: 'linear-gradient(160deg,#1e3a5f,#3b82f6)',
+  Drama:       'linear-gradient(160deg,#1e1b4b,#4338ca)',
+  Fantasy:     'linear-gradient(160deg,#4a044e,#a21caf)',
+  Horror:      'linear-gradient(160deg,#0c0a09,#7c2d12)',
+  Musical:     'linear-gradient(160deg,#500724,#be185d)',
+  Mystery:     'linear-gradient(160deg,#0f172a,#1d4ed8)',
+  Romance:     'linear-gradient(160deg,#831843,#ec4899)',
+  'Sci-Fi':    'linear-gradient(160deg,#0c4a6e,#0ea5e9)',
+  Thriller:    'linear-gradient(160deg,#052e16,#166534)',
+  War:         'linear-gradient(160deg,#422006,#92400e)',
+  Western:     'linear-gradient(160deg,#7c2d12,#c2410c)',
+  default:     'linear-gradient(160deg,#2e1065,#7c3aed)',
+};
+function grad(genres) {
+  const g = Array.isArray(genres) ? genres[0] : (genres || '').split('|')[0];
+  return GRAD[g] || GRAD.default;
+}
+function bgStyle(movie) {
+  return movie.poster_url
+    ? `background:url(${movie.poster_url}) center/cover no-repeat`
+    : `background:${grad(movie.genres)}`;
+}
+
+// ── State ─────────────────────────────────────────────────────────────
+let userId = 42;
+let searchDebounce = null;
+let currentRecs = [];
+
+// ── Populate user selector ────────────────────────────────────────────
+(function initUserSelect() {
+  const sel = document.getElementById('user-select');
+  for (let i = 1; i <= 610; i++) {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = `User ${i}`;
+    if (i === userId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+})();
+
+function onUserChange() {
+  userId = parseInt(document.getElementById('user-select').value);
+  loadBrowsePage();
+}
+
+// ── Fetch helper ──────────────────────────────────────────────────────
+async function apiFetch(url) {
+  const res = await fetch(API + url);
+  if (!res.ok) throw new Error(`API error ${res.status} for ${url}`);
+  return res.json();
+}
+
+// ── Card builder ──────────────────────────────────────────────────────
+function makeCard(movie) {
+  const genres = Array.isArray(movie.genres) ? movie.genres : (movie.genres || '').split('|');
+  const genre1 = genres[0] || '';
+  const score  = movie.score != null ? movie.score : (movie.vote_average != null ? movie.vote_average / 10 : 0);
+  const sent   = movie.sentiment_score;
+  let sentHtml = '';
+  if (sent > 0.1)  sentHtml = `<span class="card-sent-pos">▲${sent.toFixed(2)}</span>`;
+  if (sent < -0.1) sentHtml = `<span class="card-sent-neg">▼${Math.abs(sent).toFixed(2)}</span>`;
+
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.innerHTML = `
+    <div class="card-bg" style="${bgStyle(movie)}"></div>
+    <div class="card-overlay"></div>
+    <div class="card-body">
+      <div class="card-title">${esc(movie.title)}</div>
+      <div class="card-genre">${esc(genre1)}</div>
+      <span class="card-score">★ ${score.toFixed(2)}</span>${sentHtml}
+    </div>`;
+  return div;
+}
+
+// ── Row builder ───────────────────────────────────────────────────────
+function makeRow(title, movies) {
+  if (!movies.length) return null;
+  const section = document.createElement('div');
+  section.className = 'row-section';
+  const strip = document.createElement('div');
+  strip.className = 'row-strip';
+  movies.forEach(m => strip.appendChild(makeCard(m)));
+  section.innerHTML = `<div class="row-title">${esc(title)}</div>`;
+  section.appendChild(strip);
+  return section;
+}
+
+// ── Hero ──────────────────────────────────────────────────────────────
+function setHero(movie) {
+  const bg   = document.getElementById('hero-bg');
+  const imgUrl = movie.poster_url
+    ? movie.poster_url.replace('/w300', '/w1280').replace('/w500', '/w1280')
+    : null;
+  bg.style.background = imgUrl
+    ? `url(${imgUrl}) center 20%/cover no-repeat`
+    : grad(movie.genres);
+
+  document.getElementById('hero-title').textContent = movie.title;
+  const genres = Array.isArray(movie.genres) ? movie.genres : [];
+  document.getElementById('hero-meta').innerHTML =
+    (movie.release_year || '') + '&nbsp;&nbsp;' +
+    genres.slice(0,3).map(g => `<span class="hero-tag">${esc(g)}</span>`).join('');
+  document.getElementById('hero-desc').textContent = movie.overview || '';
+  document.getElementById('hero-score').textContent =
+    movie.score != null ? `★ CineIQ Score: ${movie.score.toFixed(3)}` : '';
+}
+
+// ── Browse page ───────────────────────────────────────────────────────
+async function loadBrowsePage() {
+  document.getElementById('spinner').style.display = 'flex';
+  const container = document.getElementById('rows-container');
+  container.innerHTML = '';
+
+  try {
+    // Load user data + personalized recs
+    const [ratedData, mainRecs] = await Promise.all([
+      apiFetch(`/user/${userId}/rated`),
+      apiFetch(`/recommend/${userId}?top_k=25`).catch(() => ({ recommendations: [] })),
+    ]);
+
+    const recs = mainRecs.recommendations || [];
+    currentRecs = recs;
+
+    // Hero — first recommendation that has a poster
+    const heroRec = recs.find(r => r.poster_url) || recs[0];
+    if (heroRec) setHero(heroRec);
+
+    // "Because you liked X"
+    let becauseRecs = [];
+    let becauseTitle = '';
+    if (ratedData.top_movie_id) {
+      const topMeta = await apiFetch(`/movie/${ratedData.top_movie_id}`).catch(() => null);
+      if (topMeta) {
+        becauseTitle = topMeta.title.replace(/\s*\(\d{4}\)\s*$/, '');
+        const cr = await apiFetch(`/recommend/cold-start`).catch(() => null);
+        // cold-start via POST
+        const csRes = await fetch(API + '/recommend/cold-start', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ seed_movie_ids: [ratedData.top_movie_id], top_k: 15 })
+        }).catch(() => null);
+        if (csRes && csRes.ok) {
+          const csData = await csRes.json();
+          const topIds = new Set(recs.slice(0,10).map(r => r.movie_id));
+          becauseRecs = (csData.recommendations || []).filter(r => !topIds.has(r.movie_id));
+        }
+      }
+    }
+
+    // Top genre from recs
+    const genreCounts = {};
+    recs.forEach(r => (r.genres || []).forEach(g => genreCounts[g] = (genreCounts[g]||0)+1));
+    const topGenre = Object.entries(genreCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+    const genreRecs = topGenre
+      ? recs.filter(r => (r.genres||[]).includes(topGenre)).slice(0,12)
+      : [];
+    const critRecs = [...recs].filter(r=>r.debug?.sentiment_score>0.1)
+      .sort((a,b)=>(b.debug?.sentiment_score||0)-(a.debug?.sentiment_score||0)).slice(0,12);
+
+    // Catalog rows (parallel)
+    const [topRated, action, comedy, thriller, scifi, gems, classics] = await Promise.all([
+      apiFetch('/catalog/top-rated?n=20'),
+      apiFetch('/catalog/genre?genre=Action&n=20'),
+      apiFetch('/catalog/genre?genre=Comedy&n=20'),
+      apiFetch('/catalog/genre?genre=Thriller&n=20'),
+      apiFetch('/catalog/genre?genre=Sci-Fi&n=20'),
+      apiFetch('/catalog/hidden-gems?n=20'),
+      apiFetch('/catalog/classics?n=20'),
+    ]);
+
+    // Render all rows
+    const rows = [
+      makeRow('Top Picks for You', recs.slice(0,15)),
+      becauseRecs.length ? makeRow(`Because You Liked: ${becauseTitle}`, becauseRecs.slice(0,12)) : null,
+      genreRecs.length >= 3 ? makeRow(`Top in ${topGenre}`, genreRecs) : null,
+      critRecs.length >= 3  ? makeRow('Critically Acclaimed', critRecs) : null,
+      makeRow('Top Rated on CineIQ', topRated),
+      makeRow('Action & Adventure', action),
+      makeRow('Comedy & Feel Good', comedy),
+      makeRow('Thriller & Crime', thriller),
+      makeRow('Sci-Fi & Fantasy', scifi),
+      makeRow('Hidden Gems', gems),
+      makeRow('Classic Cinema', classics),
+    ];
+
+    rows.forEach(r => { if (r) container.appendChild(r); });
+
+  } catch (e) {
+    container.innerHTML = `<p style="color:#f87171;padding:40px 48px">Failed to load: ${e.message}</p>`;
+  } finally {
+    document.getElementById('spinner').style.display = 'none';
+  }
+}
+
+// ── Search ────────────────────────────────────────────────────────────
+function onSearchInput() {
+  const q = document.getElementById('search-input').value.trim();
+  document.getElementById('search-clear').style.display = q ? 'block' : 'none';
+  document.getElementById('search-icon').style.display  = q ? 'none'  : 'block';
+  clearTimeout(searchDebounce);
+  if (q.length < 2) { hideSuggestions(); return; }
+  searchDebounce = setTimeout(() => fetchSuggestions(q), 280);
+}
+
+function onSearchKey(e) {
+  if (e.key === 'Enter') {
+    const q = document.getElementById('search-input').value.trim();
+    if (q) { hideSuggestions(); navigateToSearch(q); }
+  }
+  if (e.key === 'Escape') clearSearch();
+}
+
+async function fetchSuggestions(q) {
+  try {
+    const results = await apiFetch(`/search?q=${encodeURIComponent(q)}&n=8`);
+    renderSuggestions(results);
+  } catch {}
+}
+
+function renderSuggestions(movies) {
+  const box = document.getElementById('suggestions');
+  if (!movies.length) { hideSuggestions(); return; }
+  box.innerHTML = '';
+  movies.forEach(m => {
+    const genres = Array.isArray(m.genres) ? m.genres : [];
+    const item = document.createElement('div');
+    item.className = 'suggestion-item';
+    item.innerHTML = `
+      <div class="suggestion-thumb" style="${bgStyle(m)}"></div>
+      <div class="suggestion-meta">
+        <div class="suggestion-title">${esc(m.title)}</div>
+        <div class="suggestion-genre">${esc(genres[0]||'')}${m.release_year ? ' · '+m.release_year : ''}</div>
+      </div>`;
+    item.onclick = () => { hideSuggestions(); navigateToSearch(m.title); };
+    box.appendChild(item);
+  });
+  box.style.display = 'block';
+}
+
+function hideSuggestions() { document.getElementById('suggestions').style.display = 'none'; }
+
+function clearSearch() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-clear').style.display = 'none';
+  document.getElementById('search-icon').style.display  = 'block';
+  hideSuggestions();
+  showHome();
+}
+
+async function navigateToSearch(q) {
+  history.pushState({ page: 'search', q }, '', `?q=${encodeURIComponent(q)}`);
+  await showSearchPage(q);
+}
+
+async function showSearchPage(q) {
+  document.getElementById('browse-page').style.display = 'none';
+  const page = document.getElementById('search-page');
+  page.style.display = 'block';
+  document.getElementById('search-heading').textContent = `Results for "${q}"`;
+  document.getElementById('search-input').value = q;
+  document.getElementById('search-clear').style.display = 'block';
+  document.getElementById('search-icon').style.display  = 'none';
+  const grid = document.getElementById('search-grid');
+  grid.innerHTML = '<p style="color:var(--muted)">Searching…</p>';
+  try {
+    const results = await apiFetch(`/search?q=${encodeURIComponent(q)}&n=36`);
+    grid.innerHTML = '';
+    if (!results.length) {
+      grid.innerHTML = '<p style="color:var(--muted)">No results found.</p>';
+      return;
+    }
+    results.forEach(m => {
+      const genres = Array.isArray(m.genres) ? m.genres : [];
+      const card = document.createElement('div');
+      card.className = 'search-card';
+      card.innerHTML = `
+        <div class="search-card-img" style="${bgStyle(m)};height:200px"></div>
+        <div class="search-card-info">
+          <div class="search-card-title">${esc(m.title)}</div>
+          <div class="search-card-genre">${esc(genres[0]||'')}${m.release_year ? ' · '+m.release_year : ''}</div>
+          <div class="search-card-score">★ ${m.vote_average != null ? m.vote_average.toFixed(1) : 'N/A'} / 10</div>
+        </div>`;
+      grid.appendChild(card);
+    });
+  } catch (e) {
+    grid.innerHTML = `<p style="color:#f87171">Error: ${e.message}</p>`;
+  }
+}
+
+function showHome() {
+  document.getElementById('browse-page').style.display = 'block';
+  document.getElementById('search-page').style.display = 'none';
+  if (history.state?.page !== 'home') {
+    history.pushState({ page: 'home' }, '', '/');
+  }
+}
+
+// ── Browser back/forward ──────────────────────────────────────────────
+window.addEventListener('popstate', async (e) => {
+  const q = new URLSearchParams(location.search).get('q');
+  if (q) {
+    await showSearchPage(q);
+  } else {
+    clearSearch();
+    document.getElementById('browse-page').style.display = 'block';
+    document.getElementById('search-page').style.display = 'none';
+  }
+});
+
+// Close suggestions on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) hideSuggestions();
+});
+
+// ── Escape helper ─────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+(async function init() {
+  const q = new URLSearchParams(location.search).get('q');
+  history.replaceState({ page: q ? 'search' : 'home', q }, '', location.href);
+  await loadBrowsePage();
+  if (q) await showSearchPage(q);
+})();
+</script>
+</body>
+</html>

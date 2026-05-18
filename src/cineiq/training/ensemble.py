@@ -162,6 +162,31 @@ class HybridEnsemble:
                f"Weak on {top_asp}" if top_val < -0.1 else None)
         return personalized, note
 
+    def _vectorized_scores(self, user_id, rated_movie_ids):
+        """
+        Returns (svd_n, content_n, has_svd) — min-max normalized score arrays
+        aligned to self.all_movie_ids order, with rated items zeroed out.
+        Used by both recommend() and the Optuna tuning script.
+        """
+        rated_set = set(rated_movie_ids)
+
+        raw_svd = self._svd_scores_for_user(user_id)
+        has_svd = raw_svd is not None
+
+        liked_ids = [mid for mid in rated_movie_ids if mid in self.content_id_to_idx]
+        raw_content = self._content_scores_for_user(liked_ids)
+
+        n = len(self.all_movie_ids)
+        svd_scores = np.zeros(n)
+        content_scores = np.zeros(n)
+
+        for i, movie_id in enumerate(self.all_movie_ids):
+            if has_svd and movie_id in self.svd_item_map:
+                svd_scores[i] = raw_svd[self.svd_item_map[movie_id]]
+            content_scores[i] = raw_content[self.content_id_to_idx[movie_id]]
+
+        return self._normalize(svd_scores), self._normalize(content_scores), has_svd, rated_set
+
     def recommend(self, user_id, rated_movie_ids):
         """
         Full two-stage recommendation pipeline.
@@ -174,81 +199,50 @@ class HybridEnsemble:
             list of dicts with keys: movie_id, score, svd_score, content_score,
             sentiment_score, explanation
         """
-        rated_set = set(rated_movie_ids)
+        svd_n, content_n, has_svd, rated_set = self._vectorized_scores(user_id, rated_movie_ids)
 
         # ===== STAGE 1: Candidate Generation =====
-        # SVD scores
-        raw_svd = self._svd_scores_for_user(user_id)
-        has_svd = raw_svd is not None
+        if has_svd:
+            stage1 = self.alpha * svd_n + self.beta * content_n
+        else:
+            stage1 = content_n.copy()
 
-        # Content scores (from user's liked movies, rating > 3.5)
-        liked_ids = [mid for mid in rated_movie_ids if mid in self.content_id_to_idx]
-        raw_content = self._content_scores_for_user(liked_ids)
+        # Exclude already-rated
+        for i, mid in enumerate(self.all_movie_ids):
+            if mid in rated_set:
+                stage1[i] = -np.inf
 
-        # Build a unified score array indexed by content index
-        n_movies = self.embeddings.shape[0]
-        stage1_scores = np.full(n_movies, -np.inf)
-
-        for movie_id in self.all_movie_ids:
-            content_idx = self.content_id_to_idx[movie_id]
-
-            if movie_id in rated_set:
-                continue  # exclude already-rated
-
-            # Normalized SVD score for this movie
-            svd_score = 0.0
-            if has_svd and movie_id in self.svd_item_map:
-                svd_idx = self.svd_item_map[movie_id]
-                svd_score = raw_svd[svd_idx]
-
-            content_score = raw_content[content_idx]
-
-            # Weighted blend
-            if has_svd:
-                stage1_scores[content_idx] = (
-                    self.alpha * svd_score + self.beta * content_score
-                )
-            else:
-                # Cold start: content only
-                stage1_scores[content_idx] = content_score
-
-        # Pick top N candidates from Stage 1
-        top_n_indices = np.argsort(stage1_scores)[::-1][:self.candidate_pool]
+        top_n_indices = np.argsort(stage1)[::-1][:self.candidate_pool]
 
         # ===== STAGE 2: Personalised Sentiment Re-Ranking =====
         user_profile = self._build_aspect_profile(rated_movie_ids)
 
+        # Pre-fetch raw SVD + content for debug output
+        liked_ids = [mid for mid in rated_movie_ids if mid in self.content_id_to_idx]
+        raw_svd_full = self._svd_scores_for_user(user_id)
+        raw_content_full = self._content_scores_for_user(liked_ids)
+
         results = []
-        for content_idx in top_n_indices:
-            if stage1_scores[content_idx] == -np.inf:
+        for i in top_n_indices:
+            if stage1[i] == -np.inf:
                 continue
-
-            movie_id = self.content_idx_to_id.get(content_idx)
-            if movie_id is None:
-                continue
-
-            s1_score = stage1_scores[content_idx]
+            movie_id = self.all_movie_ids[i]
 
             sent_score, aspect_note = self._personalized_sentiment(movie_id, user_profile)
-            final_score = s1_score + self.gamma * sent_score
+            final_score = stage1[i] + self.gamma * sent_score
 
-            svd_raw = 0.0
-            if has_svd and movie_id in self.svd_item_map:
-                svd_raw = raw_svd[self.svd_item_map[movie_id]]
-            content_raw = raw_content[content_idx]
-
-            explanation = self._explain(svd_raw, content_raw, sent_score, has_svd, aspect_note)
+            svd_raw = float(raw_svd_full[self.svd_item_map[movie_id]]) if (has_svd and movie_id in self.svd_item_map) else 0.0
+            content_raw = float(raw_content_full[self.content_id_to_idx[movie_id]])
 
             results.append({
                 'movie_id': movie_id,
                 'score': round(float(final_score), 4),
-                'svd_score': round(float(svd_raw), 4),
-                'content_score': round(float(content_raw), 4),
+                'svd_score': round(svd_raw, 4),
+                'content_score': round(content_raw, 4),
                 'sentiment_score': round(float(sent_score), 4),
-                'explanation': explanation
+                'explanation': self._explain(svd_raw, content_raw, sent_score, has_svd, aspect_note),
             })
 
-        # Sort by final score and return top K
         results.sort(key=lambda x: x['score'], reverse=True)
         return results[:self.top_k]
 

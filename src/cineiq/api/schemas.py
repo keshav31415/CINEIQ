@@ -34,6 +34,17 @@ class ColdStartRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=50)
 
 
+class CatalogItem(BaseModel):
+    movie_id: int
+    title: str
+    genres: list[str]
+    overview: str | None
+    release_year: int | None
+    vote_average: float | None
+    poster_url: str | None
+    sentiment_score: float | None
+
+
 class MovieResponse(BaseModel):
     movie_id: int
     title: str

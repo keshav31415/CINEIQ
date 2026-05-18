@@ -587,6 +587,7 @@ dependencies = [
     { name = "setuptools" },
     { name = "sqlalchemy" },
     { name = "streamlit" },
+    { name = "streamlit-searchbox" },
     { name = "uvicorn" },
     { name = "vadersentiment" },
     { name = "wheel" },
@@ -611,6 +612,7 @@ requires-dist = [
     { name = "setuptools", specifier = "<70" },
     { name = "sqlalchemy", specifier = ">=2.0.49" },
     { name = "streamlit", specifier = ">=1.57.0" },
+    { name = "streamlit-searchbox", specifier = ">=0.1.24" },
     { name = "uvicorn", specifier = ">=0.46.0" },
     { name = "vadersentiment", specifier = ">=3.3.2" },
     { name = "wheel", specifier = ">=0.47.0" },
@@ -4755,6 +4757,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5d/f8/b2daf7a5f8ae15527daf94406e771bb6075e958a01c3dde9eba79dc3c9a3/streamlit-1.57.0.tar.gz", hash = "sha256:0b028d305c1a1a757071b2c9504966787602842fc8af6e873795ca58d2b4d12f", size = 8678859, upload-time = "2026-04-28T22:13:32.238Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d8/1a/3ca2293d8552bacea3e67e9600d2d1df7df4a325059769ad83d91c279595/streamlit-1.57.0-py3-none-any.whl", hash = "sha256:0d1d41972aeade5637dbb0e7f0eefa5312272f85304923d240a1b1f0475249c8", size = 9194216, upload-time = "2026-04-28T22:13:29.624Z" },
+]
+
+[[package]]
+name = "streamlit-searchbox"
+version = "0.1.24"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/46/c1/b037f76f7d6da73af6311720df3c56ed534616572da4261c0dea1e37110e/streamlit_searchbox-0.1.24.tar.gz", hash = "sha256:b6009c368812feea0dd211f03c9cc5cc85b540b0d0a57165bb2885f67d6a8a3d", size = 844522, upload-time = "2025-12-23T07:44:55.367Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4e/4d/cd7f4ca601f700b88a2ddf9b4dff9595ca15c77ab1c786b894d0668fe319/streamlit_searchbox-0.1.24-py3-none-any.whl", hash = "sha256:52ebae43acf8a5c7b6a0e681efc58170c880da308c846dd2db907da84633e468", size = 847934, upload-time = "2025-12-23T07:44:53.885Z" },
 ]
 
 [[package]]
